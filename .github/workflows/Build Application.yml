@@ -245,7 +245,7 @@ jobs:
 
   release:
     needs: [ build-windows, build-macos, build-linux ]
-    if: github.event_name != 'pull_request' && github.repository == 'lycorisdeve/streamcap'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code

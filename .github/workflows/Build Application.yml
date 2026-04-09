@@ -56,17 +56,16 @@ jobs:
         mv dist/StreamCap/_internal/config dist/StreamCap/
         mv dist/StreamCap/_internal/locales dist/StreamCap/
         mv dist/StreamCap/_internal/assets dist/StreamCap/
-        echo "Folders moved successfully."
         
     - name: Package Windows build
       run: |
-        Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows.zip"
+        Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap_Windows.zip"
         
     - name: Upload Windows artifact
       uses: actions/upload-artifact@v4
       with:
         name: StreamCap-Windows
-        path: StreamCap-Windows.zip
+        path: StreamCap_Windows.zip
         retention-days: 30
 
   build-macos:
@@ -83,7 +82,6 @@ jobs:
         
     - name: Install system dependencies
       run: |
-        # Install FFmpeg
         brew install ffmpeg
         
     - name: Cache pip dependencies
@@ -116,7 +114,6 @@ jobs:
         mkdir -p "StreamCap.app/Contents/MacOS"
         mkdir -p "StreamCap.app/Contents/Resources"
         
-        # Create Info.plist
         cat > "StreamCap.app/Contents/Info.plist" << EOF
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -146,19 +143,13 @@ jobs:
         </plist>
         EOF
         
-        # Copy executable and resources
         cp -r dist/StreamCap/* "StreamCap.app/Contents/MacOS/"
         cp assets/icon.ico "StreamCap.app/Contents/Resources/icon.ico"
-        
-        # Make executable
         chmod +x "StreamCap.app/Contents/MacOS/StreamCap"
         
     - name: Create DMG settings file
       run: |
         cat > dmg_settings.py << EOF
-        import os
-        
-        # DMG settings
         format = 'UDZO'
         size = '500M'
         files = ['StreamCap.app']
@@ -188,13 +179,13 @@ jobs:
         
     - name: Create DMG
       run: |
-        dmgbuild -s dmg_settings.py "StreamCap" "StreamCap-macOS.dmg"
+        dmgbuild -s dmg_settings.py "StreamCap" "StreamCap_macOS.dmg"
         
     - name: Upload macOS artifact
       uses: actions/upload-artifact@v4
       with:
         name: StreamCap-macOS
-        path: StreamCap-macOS.dmg
+        path: StreamCap_macOS.dmg
         retention-days: 30
 
   build-linux:
@@ -242,28 +233,23 @@ jobs:
         mkdir -p ../package
         rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' --exclude='*.log' --exclude='.pytest_cache' --exclude='node_modules' --exclude='dist' --exclude='build' --exclude='*.egg-info' . ../package/StreamCap/
         cd ../package
-        tar -czf StreamCap-Linux.tar.gz StreamCap/
-        mv StreamCap-Linux.tar.gz $GITHUB_WORKSPACE/
+        tar -czf StreamCap_Linux.tar.gz StreamCap/
+        mv StreamCap_Linux.tar.gz $GITHUB_WORKSPACE/
         
     - name: Upload Linux artifact
       uses: actions/upload-artifact@v4
       with:
         name: StreamCap-Linux
-        path: StreamCap-Linux.tar.gz
+        path: StreamCap_Linux.tar.gz
         retention-days: 30
 
-    # 这里提供一个输出
-    outputs:
-      linux-artifact-path: ${{ steps.upload-linux-artifact.outputs.artifact-path }}
-
-  prerelease:
+  release:
     needs: [ build-windows, build-macos, build-linux ]
     if: github.event_name != 'pull_request' && github.repository == 'lycorisdeve/streamcap'
     runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.build-windows.outputs.version }}
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Download Windows artifact
       uses: actions/download-artifact@v4
@@ -283,47 +269,14 @@ jobs:
         name: StreamCap-Linux
         path: releases/
 
-    - name: Check and rename files
-      run: |
-        # 检查 Windows 文件是否存在并重命名
-        if [ -f "releases/StreamCap-Windows.zip" ]; then
-          mv releases/StreamCap-Windows.zip "StreamCap_Windows_beta.zip"
-        else
-          echo "StreamCap-Windows.zip not found!"
-        fi
-        # 检查 macOS 文件是否存在并重命名
-        if [ -f "releases/StreamCap-macOS.dmg" ]; then
-          mv releases/StreamCap-macOS.dmg "StreamCap_macOS_beta.dmg"
-        else
-          echo "StreamCap-macOS.dmg not found!"
-        fi
-        # 检查 Linux 文件是否存在并重命名
-        if [ -f "releases/StreamCap-Linux.tar.gz" ]; then
-          mv releases/StreamCap-Linux.tar.gz "StreamCap_Linux_beta.tar.gz"
-        else
-          echo "StreamCap-Linux.tar.gz not found!"
-        fi
-        
-    - name: Delete Pre-Release (if exists)
-      run: |
-        if gh release view beta &>/dev/null; then
-          gh release delete beta -y
-        fi
-      env:
-        GH_TOKEN: ${{ github.token }}
-    
-    - name: Create or update beta tag
-      uses: richardsimko/update-tag@v1
-      with:
-        tag_name: beta
-      env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-
-    - name: Publish Pre-Release
+    - name: Publish Release
       uses: ncipollo/release-action@v1
       with:
-        name: StreamCap-beta
-        tag: "beta"
-        body: "此版本为测试版，可能存在不稳定情况，升级前请务必备份好数据。"
-        prerelease: true
-        artifacts: ${{ github.workspace }}/*.zip,${{ github.workspace }}/*.dmg,${{ github.workspace }}/*.tar.gz
+        name: StreamCap
+        tag: "latest"
+        body: "StreamCap 最新正式版本"
+        prerelease: false
+        allowUpdates: true
+        replacesArtifacts: true
+        artifacts: "releases/StreamCap_Windows.zip,releases/StreamCap_macOS.dmg,releases/StreamCap_Linux.tar.gz"
+        token: ${{ secrets.GITHUB_TOKEN }}
